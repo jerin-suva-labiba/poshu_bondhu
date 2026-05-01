@@ -3,9 +3,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_theme.dart';
 import 'home_screen.dart';
 
-const String _dummyUsername = 'admin';
-const String _dummyPassword = 'password123';
-
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -19,7 +16,20 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
   bool _isLoading = false;
+  bool _isFirstTime = false;
   String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkFirstTime();
+  }
+
+  Future<void> _checkFirstTime() async {
+    final prefs = await SharedPreferences.getInstance();
+    final hasUser = prefs.getString('username') != null;
+    setState(() => _isFirstTime = !hasUser);
+  }
 
   @override
   void dispose() {
@@ -30,23 +40,38 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
-    setState(() { _isLoading = true; _errorMessage = null; });
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
 
-    await Future.delayed(const Duration(milliseconds: 400));
+    await Future.delayed(const Duration(milliseconds: 300));
 
+    final prefs = await SharedPreferences.getInstance();
     final username = _usernameController.text.trim();
     final password = _passwordController.text;
 
-    if (username == _dummyUsername && password == _dummyPassword) {
-      final prefs = await SharedPreferences.getInstance();
+    if (_isFirstTime) {
+      await prefs.setString('username', username);
+      await prefs.setString('password', password);
       await prefs.setBool('is_logged_in', true);
       if (!mounted) return;
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const HomeScreen()));
+      Navigator.pushReplacement(
+          context, MaterialPageRoute(builder: (_) => const HomeScreen()));
     } else {
-      setState(() {
-        _isLoading = false;
-        _errorMessage = 'Invalid username or password.';
-      });
+      final savedUsername = prefs.getString('username');
+      final savedPassword = prefs.getString('password');
+      if (username == savedUsername && password == savedPassword) {
+        await prefs.setBool('is_logged_in', true);
+        if (!mounted) return;
+        Navigator.pushReplacement(
+            context, MaterialPageRoute(builder: (_) => const HomeScreen()));
+      } else {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = 'Invalid username or password.';
+        });
+      }
     }
   }
 
@@ -93,6 +118,32 @@ class _LoginScreenState extends State<LoginScreen> {
                   'Your pet care companion',
                   style: TextStyle(color: AppTheme.textLight, fontSize: 14),
                 ),
+                const SizedBox(height: 8),
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 300),
+                  child: _isFirstTime
+                      ? Container(
+                          key: const ValueKey('first'),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: AppTheme.secondary.withOpacity(0.5),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.info_outline_rounded,
+                                  size: 16, color: AppTheme.textDark),
+                              SizedBox(width: 6),
+                              Text('First time? Set your username & password.',
+                                  style: TextStyle(
+                                      fontSize: 12, color: AppTheme.textDark)),
+                            ],
+                          ),
+                        )
+                      : const SizedBox.shrink(key: ValueKey('returning')),
+                ),
                 const SizedBox(height: 40),
                 Form(
                   key: _formKey,
@@ -104,8 +155,9 @@ class _LoginScreenState extends State<LoginScreen> {
                           hintText: 'Username',
                           prefixIcon: Icon(Icons.person_outline_rounded),
                         ),
-                        validator: (v) =>
-                            (v == null || v.trim().isEmpty) ? 'Enter username' : null,
+                        validator: (v) => (v == null || v.trim().isEmpty)
+                            ? 'Enter username'
+                            : null,
                       ),
                       const SizedBox(height: 16),
                       TextFormField(
@@ -118,8 +170,8 @@ class _LoginScreenState extends State<LoginScreen> {
                             icon: Icon(_obscurePassword
                                 ? Icons.visibility_off_outlined
                                 : Icons.visibility_outlined),
-                            onPressed: () =>
-                                setState(() => _obscurePassword = !_obscurePassword),
+                            onPressed: () => setState(
+                                () => _obscurePassword = !_obscurePassword),
                           ),
                         ),
                         validator: (v) =>
@@ -128,7 +180,8 @@ class _LoginScreenState extends State<LoginScreen> {
                       if (_errorMessage != null) ...[
                         const SizedBox(height: 12),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 10),
                           decoration: BoxDecoration(
                             color: Colors.red.shade50,
                             borderRadius: BorderRadius.circular(12),
@@ -136,10 +189,13 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           child: Row(
                             children: [
-                              Icon(Icons.error_outline, color: Colors.red.shade400, size: 18),
+                              Icon(Icons.error_outline,
+                                  color: Colors.red.shade400, size: 18),
                               const SizedBox(width: 8),
                               Text(_errorMessage!,
-                                  style: TextStyle(color: Colors.red.shade600, fontSize: 13)),
+                                  style: TextStyle(
+                                      color: Colors.red.shade600,
+                                      fontSize: 13)),
                             ],
                           ),
                         ),
@@ -156,32 +212,16 @@ class _LoginScreenState extends State<LoginScreen> {
                                   child: CircularProgressIndicator(
                                       strokeWidth: 2, color: Colors.white),
                                 )
-                              : const Text('Login',
-                                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                              : Text(
+                                  _isFirstTime
+                                      ? 'Create Account & Login'
+                                      : 'Login',
+                                  style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold),
+                                ),
                         ),
                       ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 32),
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: AppTheme.yellow,
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: const Column(
-                    children: [
-                      Text('Demo Credentials',
-                          style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: AppTheme.textDark,
-                              fontSize: 13)),
-                      SizedBox(height: 6),
-                      Text('Username: admin',
-                          style: TextStyle(color: AppTheme.textLight, fontSize: 12)),
-                      Text('Password: password123',
-                          style: TextStyle(color: AppTheme.textLight, fontSize: 12)),
                     ],
                   ),
                 ),
